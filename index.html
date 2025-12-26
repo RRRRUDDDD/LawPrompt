@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt生成器</title>
+    <style>
+        /* === UI 样式 (Gemini 风格，保持不变) === */
+        :root {
+            --bg-color: #f0f4f9;
+            --surface-color: #ffffff;
+            --primary-color: #1a73e8;
+            --text-main: #1f1f1f;
+            --text-secondary: #444746;
+            --accent-gradient: linear-gradient(90deg, #4285f4, #9b72cb);
+            --radius-large: 24px;
+            --radius-medium: 12px;
+        }
+
+        body {
+            font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .app-container {
+            background: var(--surface-color);
+            width: 100%;
+            max-width: 700px;
+            border-radius: var(--radius-large);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            min-height: 400px;
+            transition: all 0.3s ease;
+        }
+
+        .header { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        .sparkle-icon { width: 24px; height: 24px; fill: url(#grad1); }
+        h2 { margin: 0; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
+
+        .progress-bar-bg { height: 4px; background: #e0e0e0; border-radius: 2px; margin-bottom: 24px; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--accent-gradient); width: 0%; transition: width 0.4s ease; }
+
+        .step-container { display: none; animation: fadeIn 0.4s ease forwards; }
+        .step-container.active { display: block !important; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: 0; } }
+
+        .options-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+
+        .option-card {
+            background: var(--bg-color); border: 1px solid transparent; padding: 20px; border-radius: var(--radius-medium);
+            text-align: left; cursor: pointer; transition: all 0.2s; color: var(--text-main);
+        }
+        .option-card:hover { background: #e3eefc; border-color: #d0e1fd; color: #0b57d0; }
+        .option-card strong { display: block; font-size: 16px; } /* 去掉了margin-bottom，因为没有描述文字了 */
+        
+        textarea {
+            width: 100%; height: 150px; padding: 15px; border: none; background: #f8f9fa;
+            border-radius: var(--radius-medium); resize: none; outline: none; font-size: 16px; line-height: 1.6; color: #333; box-sizing: border-box;
+        }
+        .action-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .btn { padding: 10px 24px; border-radius: 50px; border: none; cursor: pointer; font-weight: 500; font-size: 14px; }
+        .btn-primary { background: var(--text-main); color: white; }
+        .btn-ghost { background: transparent; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+<svg style="width:0;height:0;position:absolute;"><linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#4285f4;stop-opacity:1" /><stop offset="100%" style="stop-color:#9b72cb;stop-opacity:1" /></linearGradient></svg>
+
+<div class="app-container">
+    <div class="header">
+        <svg class="sparkle-icon" viewBox="0 0 24 24"><path d="M12 2L9.1 8.9L2 12L9.1 15.1L12 22L14.9 15.1L22 12L14.9 8.9L12 2Z"/></svg>
+        <div>
+            <h2>Prompt生成器</h2>
+            <div id="status-text" class="subtitle">准备就绪</div>
+        </div>
+    </div>
+    <div class="progress-bar-bg"><div id="progress-bar" class="progress-bar-fill"></div></div>
+
+    <div id="dynamic-content"></div>
+
+    <div id="result-area" class="step-container">
+        <textarea id="final-output" readonly></textarea>
+        <div class="action-bar">
+            <button class="btn btn-ghost" onclick="startApp()">重置</button>
+            <button class="btn btn-primary" onclick="copyResult()">复制文本</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ========================================================================
+     ⚙️ [配置区] 
+     ======================================================================== */
+    
+    // 全局默认连接词 (如果没单独写，就用这个，比如逗号)
+    const DEFAULT_CONNECTOR = "";
+
+    // 剧配置
+    // 格式：[ "按钮标题", "生成的文本", "下一页ID", "【去往下一页的连接词】" ]
+    // 注意：第四项“连接词”是定义【这句话】和【下一句话】中间用什么连起来。
+    
+    const SCENARIO = {
+        
+        "root": {
+            title: "请选择你要询问的类型",
+            options: [
+                ["诈骗罪", "你是一名专注于刑法领域的律师，擅长案例研究、法律条文检索以及案件策略分析。", "all", ""]
+            ]
+        },
+
+        "all": {
+            title: "请选择你被诈骗的类型",
+            options: [
+                ["先给甜头，再诱导大额投入，最后关门杀猪。", "", "page_one", ""], 
+                ["制造紧急情况或利用权威身份，让你失去判断力。", "", "page_two", ""],
+                ["瞄准你的资金短缺或生活需求，精准收割。", "", "page_three", ""],
+                ["利用你不熟悉的技术功能或概念进行诈骗。", "", "page_four", ""]
+            ]
+        },
+
+        "page_money": {
+            title: "请选择你被诈骗的金额",
+            options: [
+                ["5000元以下", "被诈骗金额为5000元以下。","page_return"], 
+                ["5000元以上", "被诈骗金额为5000元以上。","page_return"]
+            ]
+        },
+
+        "page_return": {
+            title: "是否退赃",
+            options: [
+                ["是", "已退赃。请你帮我检索法条并预测可能的判决结果", ], 
+                ["否", "被未退赃。请你帮我检索法条并预测可能的判决结果", ]
+            ]
+        },
+
+        "page_one": {
+            title: "请选择你被诈骗的类型",
+            options: [
+                ["通过短信、短视频评论、群聊发布“动动手指月入过万”、“点赞返佣金”广告。，先让你做小额任务（关注公众号、点赞），立马返现（如充100返105）。再诱导你下载虚假APP，要求做“连单”或“大额垫资任务”。投入大额资金后，显示“操作失误”、“信誉分不足”无法提现，要求继续转账解冻。", "针对“刷单返利诈骗”案件，", "page_money", ""], 
+                ["骗子伪装成“金融大师”、“富二代”或“内幕知情者”，在社交平台建立信任/恋爱关系。 透露有“漏洞”或“内幕”，指导你在虚假平台（外汇、虚拟币）小额投资，让你先赚一笔并成功提现。怂恿你贷款、卖房梭哈一把。当账户金额巨大时，平台无法提现，骗子失联。", "针对“虚假投资理财”案件，", "page_money", ""],
+            ]
+        },
+
+         "page_two": {
+            title: "请选择你被诈骗的类型",
+            options: [
+                ["准确报出你的购物信息（快递单号、商品名）。 谎称商品有质量问题（甲醛超标）、快递丢失需要双倍赔付，或者误操作把你设为“代理商”每月扣费。诱导你离开官方平台，去“理赔中心”网页填写银行卡号、验证码，或诱导开启屏幕共享。", "针对“冒充电商/物流客服”案件，","page_money", ""] , 
+                ["自称公安局、社保局或通信管理局，称你涉嫌洗钱、护照非法使用或社保卡被盗刷。发送虚假的“通缉令”图片，要求你保密，去酒店开房单线联系，切断与外界交流。要求将资金转入“安全账户”进行资金清查。", "针对“冒充公检法”案件，", "page_money", "" ]
+            ]
+        },
+
+         "page_three": {
+            title: "请选择你被诈骗的类型",
+            options: [
+                ["打着“无抵押、秒到账、低利息”的旗号。下载APP填写资料后，显示额度已批，但提现失败。理由是“银行卡号填错”、“需交工本费”、“解冻费”、“验证还款能力”，要求你先转钱。", "针对“虚假网络贷款”案件，", "page_money", "" ], 
+                ["声称可以“洗白征信”、“消除逾期记录”。诱导你提供个人敏感信息，并支付高额“手续费”。拿钱拉黑，或者利用你的信息去骗贷。", "针对“虚假征信修复”案件，", "page_money", "" ]
+            ]
+        },
+        
+        "page_four": {
+            title: "请选择你被诈骗的类型",
+            options: [
+                ["冒充客服。以“取消百万保障”、“取消会员自动扣费”为由，诱导用户下载会议软件开启屏幕共享。你在手机上输入银行卡密码、验证码时，对方通过共享屏幕看得一清二楚，直接盗刷。", "被诈骗金额为5000元以下。请你帮我检索法条并预测可能的判决结果。", "page_money", "针对“屏幕共享诈骗”案件，" ], 
+                ["盗用好友社交账号。与你视频通话，使用AI技术将脸换成好友的脸（可能表情僵硬），声音也是合成的。谎称急需用钱（朋友住院、竞标周转），要求快速转账。", "被诈骗金额为5000元以上。请你帮我检索法条并预测可能的判决结果。", "page_money", "针对“AI 换脸/拟声诈骗”案件，" ]
+            ]
+        },
+
+        "end": {
+            title: "第三阶段",
+            options: [
+                ["第七个选择", "第七个选择", ""],
+                ["第八个选择", "第八个选择", ""]
+            ]
+        }
+    };
+
+
+    /* ========================================================================
+     🔧 系统逻辑
+     ======================================================================== */
+    let outputParts = []; // 存储：{ text: "内容", nextConnector: "连接词" }
+    let stepCount = 0;
+
+    function startApp() {
+        outputParts = [];
+        stepCount = 0;
+        document.getElementById('result-area').classList.remove('active');
+        gotoPage("root");
+    }
+
+    function gotoPage(pageId) {
+        const container = document.getElementById('dynamic-content');
+        const statusText = document.getElementById('status-text');
+        const progressBar = document.getElementById('progress-bar');
+        
+        const pageData = SCENARIO[pageId];
+        if (!pageData) { alert("配置错误：找不到ID " + pageId); return; }
+
+        // 渲染界面
+        container.innerHTML = '';
+        statusText.innerText = pageData.title;
+        
+        stepCount++;
+        let progress = stepCount * 25; 
+        if(progress > 100) progress = 95;
+        progressBar.style.width = `${progress}%`;
+
+        const stepDiv = document.createElement('div');
+        stepDiv.className = 'step-container active';
+        const gridDiv = document.createElement('div');
+        gridDiv.className = 'options-grid';
+
+        pageData.options.forEach(item => {
+            // 解构：[标题, 内容, 下一页ID, 去往下一页的连接词]
+            const [label, value, nextId, connectorToNext] = item;
+            
+            const btn = document.createElement('button');
+            btn.className = 'option-card';
+            // 界面上只显示标题，不显示任何多余信息
+            btn.innerHTML = `<strong>${label}</strong>`;
+            
+            btn.onclick = () => {
+                // 保存：当前文本 + 紧接其后的连接词
+                outputParts.push({
+                    text: value,
+                    connector: connectorToNext || DEFAULT_CONNECTOR
+                });
+
+                if (nextId && nextId.trim() !== "") {
+                    gotoPage(nextId);
+                } else {
+                    finish();
+                }
+            };
+            gridDiv.appendChild(btn);
+        });
+
+        stepDiv.appendChild(gridDiv);
+        container.appendChild(stepDiv);
+    }
+
+    function finish() {
+        document.getElementById('status-text').innerText = "生成完毕";
+        document.getElementById('progress-bar').style.width = "100%";
+        document.getElementById('dynamic-content').innerHTML = '';
+        
+        let finalString = "";
+        
+        // 拼接逻辑：文本 + (如果是中间段落则加连接词)
+        outputParts.forEach((part, index) => {
+            // 加上当前的文本
+            finalString += part.text;
+            
+            // 如果这不是最后一段，就加上这段话定义的“连接词”
+            if (index < outputParts.length - 1) {
+                finalString += part.connector;
+            }
+        });
+        
+        finalString += "。";
+
+        document.getElementById('final-output').value = finalString;
+        document.getElementById('result-area').classList.add('active');
+    }
+
+    function copyResult() {
+        const textArea = document.getElementById('final-output');
+        textArea.select();
+        navigator.clipboard.writeText(textArea.value).then(() => alert("已复制！"));
+    }
+
+    startApp();
+</script>
+</body>
+</html>
