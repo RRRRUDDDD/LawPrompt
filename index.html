@@ -3,23 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prompt生成器</title>
+    <title>AI Prompt Generator</title>
     <style>
-        /* === UI 样式 (Gemini 风格，保持不变) === */
+        /* =========================================
+           🎨 [CSS 变量系统] - 定义高级感配色
+           ========================================= */
         :root {
-            --bg-color: #f0f4f9;
-            --surface-color: #ffffff;
-            --primary-color: #1a73e8;
-            --text-main: #1f1f1f;
-            --text-secondary: #444746;
-            --accent-gradient: linear-gradient(90deg, #4285f4, #9b72cb);
+            /* 深色系背景 - 营造沉浸感 */
+            --bg-deep: #050511; 
+            
+            /* 玻璃拟态容器背景 (极低透明度的白色) */
+            --glass-bg: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-blur: 24px;
+
+            /* 文本颜色 */
+            --text-main: #ffffff;
+            --text-secondary: #94a3b8;
+            
+            /* 品牌渐变色 (赛博朋克/AI 风格) */
+            --brand-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+            --glow-color: rgba(168, 85, 247, 0.4);
+
+            /* 圆角与间距 */
             --radius-large: 24px;
-            --radius-medium: 12px;
+            --radius-medium: 16px;
         }
 
         body {
-            font-family: 'Google Sans', 'Segoe UI', Roboto, sans-serif;
-            background-color: var(--bg-color);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-deep);
             color: var(--text-main);
             display: flex;
             justify-content: center;
@@ -27,64 +40,284 @@
             min-height: 100vh;
             margin: 0;
             padding: 20px;
+            position: relative;
+            overflow-x: hidden;
         }
 
+        /* =========================================
+           ✨ [环境光效] - 流动的极光背景
+           ========================================= */
+        .ambient-glow {
+            position: fixed;
+            width: 100vw;
+            height: 100vh;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            background: radial-gradient(circle at 15% 50%, rgba(76, 29, 149, 0.15), transparent 40%),
+                        radial-gradient(circle at 85% 30%, rgba(56, 189, 248, 0.15), transparent 40%);
+        }
+
+        .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.5;
+            animation: float 20s infinite ease-in-out;
+        }
+        .orb-1 { width: 400px; height: 400px; background: #4f46e5; top: -10%; left: -10%; animation-delay: 0s; }
+        .orb-2 { width: 500px; height: 500px; background: #c026d3; bottom: -10%; right: -10%; animation-delay: -5s; }
+        .orb-3 { width: 300px; height: 300px; background: #06b6d4; top: 40%; left: 40%; animation-delay: -10s; opacity: 0.3; }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(30px, -50px); }
+        }
+
+        /* =========================================
+           🧊 [主容器] - 磨砂玻璃质感
+           ========================================= */
         .app-container {
-            background: var(--surface-color);
             width: 100%;
-            max-width: 700px;
+            max-width: 720px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
             border-radius: var(--radius-large);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
             padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             display: flex;
             flex-direction: column;
-            min-height: 400px;
-            transition: all 0.3s ease;
+            min-height: 450px;
+            transition: height 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
 
-        .header { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
-        .sparkle-icon { width: 24px; height: 24px; fill: url(#grad1); }
-        h2 { margin: 0; background: var(--accent-gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-
-        .progress-bar-bg { height: 4px; background: #e0e0e0; border-radius: 2px; margin-bottom: 24px; overflow: hidden; }
-        .progress-bar-fill { height: 100%; background: var(--accent-gradient); width: 0%; transition: width 0.4s ease; }
-
-        .step-container { display: none; animation: fadeIn 0.4s ease forwards; }
-        .step-container.active { display: block !important; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: 0; } }
-
-        .options-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-
-        .option-card {
-            background: var(--bg-color); border: 1px solid transparent; padding: 20px; border-radius: var(--radius-medium);
-            text-align: left; cursor: pointer; transition: all 0.2s; color: var(--text-main);
+        /* 顶部装饰线 */
+        .app-container::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
         }
-        .option-card:hover { background: #e3eefc; border-color: #d0e1fd; color: #0b57d0; }
-        .option-card strong { display: block; font-size: 16px; } /* 去掉了margin-bottom，因为没有描述文字了 */
+
+        /* 头部区域 */
+        .header { 
+            margin-bottom: 30px; 
+            display: flex; 
+            align-items: center; 
+            gap: 16px; 
+        }
         
-        textarea {
-            width: 100%; height: 150px; padding: 15px; border: none; background: #f8f9fa;
-            border-radius: var(--radius-medium); resize: none; outline: none; font-size: 16px; line-height: 1.6; color: #333; box-sizing: border-box;
+        .icon-box {
+            width: 48px; height: 48px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
         }
-        .action-bar { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
-        .btn { padding: 10px 24px; border-radius: 50px; border: none; cursor: pointer; font-weight: 500; font-size: 14px; }
-        .btn-primary { background: var(--text-main); color: white; }
-        .btn-ghost { background: transparent; color: var(--text-secondary); }
+        .sparkle-icon { width: 24px; height: 24px; fill: white; }
+
+        h2 { 
+            margin: 0; 
+            font-size: 24px; 
+            font-weight: 600;
+            background: linear-gradient(to right, #fff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle { 
+            color: var(--text-secondary); 
+            font-size: 14px; 
+            margin-top: 4px; 
+            font-weight: 400;
+        }
+
+        /* 进度条 */
+        .progress-container {
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 4px;
+            margin-bottom: 32px;
+            overflow: hidden;
+            position: relative;
+        }
+        .progress-bar-fill { 
+            height: 100%; 
+            background: var(--brand-gradient); 
+            width: 0%; 
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 10px var(--glow-color);
+            position: relative;
+        }
+        /* 进度条末端的高光 */
+        .progress-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0; right: 0; bottom: 0;
+            width: 10px;
+            background: #fff;
+            filter: blur(2px);
+            opacity: 0.7;
+        }
+
+        /* 选项卡片网格 */
+        .options-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); 
+            gap: 16px; 
+        }
+
+        /* =========================================
+           🔘 [交互组件] - 选项卡片
+           ========================================= */
+        .option-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 24px 20px;
+            border-radius: var(--radius-medium);
+            text-align: left;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .option-card strong {
+            display: block;
+            font-size: 16px;
+            color: var(--text-main);
+            margin-bottom: 0; /* 原有代码去掉了描述，这里保持一致 */
+            font-weight: 500;
+        }
+
+        /* 悬停态：微微上浮 + 边框发光 */
+        .option-card:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(168, 85, 247, 0.5);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5), 
+                        0 0 15px rgba(168, 85, 247, 0.1); /* 紫色微光 */
+        }
+        
+        .option-card:active {
+            transform: scale(0.98);
+        }
+
+        /* 动画容器 */
+        .step-container { 
+            display: none; 
+            animation: slideUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; 
+        }
+        .step-container.active { display: block !important; }
+        
+        @keyframes slideUp { 
+            from { opacity: 0; transform: translateY(20px); filter: blur(5px); } 
+            to { opacity: 1; transform: 0; filter: blur(0); } 
+        }
+
+        /* =========================================
+           📝 [结果区域] - 代码编辑器风格
+           ========================================= */
+        textarea {
+            width: 100%;
+            height: 180px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+            background: rgba(0, 0, 0, 0.3); /* 更深的背景 */
+            border-radius: var(--radius-medium);
+            resize: none;
+            outline: none;
+            font-size: 15px;
+            line-height: 1.8;
+            color: #e2e8f0;
+            box-sizing: border-box;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace; /* 代码字体 */
+            margin-top: 10px;
+            transition: border-color 0.2s;
+        }
+        
+        textarea:focus {
+            border-color: rgba(168, 85, 247, 0.5);
+        }
+
+        .action-bar { 
+            display: flex; 
+            justify-content: flex-end; 
+            gap: 12px; 
+            margin-top: 24px; 
+        }
+
+        /* 按钮样式 */
+        .btn { 
+            padding: 12px 28px; 
+            border-radius: 50px; 
+            border: none; 
+            cursor: pointer; 
+            font-weight: 600; 
+            font-size: 14px; 
+            transition: all 0.2s;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-ghost { 
+            background: transparent; 
+            color: var(--text-secondary); 
+            border: 1px solid transparent;
+        }
+        .btn-ghost:hover {
+            color: var(--text-main);
+            background: rgba(255,255,255,0.05);
+        }
+
+        .btn-primary { 
+            background: var(--brand-gradient);
+            color: white; 
+            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4);
+        }
+        .btn-primary:hover {
+            filter: brightness(1.1);
+            box-shadow: 0 6px 20px rgba(168, 85, 247, 0.6);
+            transform: translateY(-1px);
+        }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
     </style>
 </head>
 <body>
-<svg style="width:0;height:0;position:absolute;"><linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" style="stop-color:#4285f4;stop-opacity:1" /><stop offset="100%" style="stop-color:#9b72cb;stop-opacity:1" /></linearGradient></svg>
+
+<div class="ambient-glow">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+</div>
 
 <div class="app-container">
     <div class="header">
-        <svg class="sparkle-icon" viewBox="0 0 24 24"><path d="M12 2L9.1 8.9L2 12L9.1 15.1L12 22L14.9 15.1L22 12L14.9 8.9L12 2Z"/></svg>
+        <div class="icon-box">
+            <svg class="sparkle-icon" viewBox="0 0 24 24"><path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5zM19 15l-1.25 2.75L15 19l2.75 1.25L19 23l1.25-2.75L23 19l-2.75-1.25L19 15z"/></svg>
+        </div>
         <div>
-            <h2>Prompt生成器</h2>
-            <div id="status-text" class="subtitle">准备就绪</div>
+            <h2>AI Prompt Generator</h2>
+            <div id="status-text" class="subtitle">AI 系统准备就绪</div>
         </div>
     </div>
-    <div class="progress-bar-bg"><div id="progress-bar" class="progress-bar-fill"></div></div>
+    
+    <div class="progress-container">
+        <div id="progress-bar" class="progress-bar-fill"></div>
+    </div>
 
     <div id="dynamic-content"></div>
 
@@ -92,25 +325,19 @@
         <textarea id="final-output" readonly></textarea>
         <div class="action-bar">
             <button class="btn btn-ghost" onclick="startApp()">重置</button>
-            <button class="btn btn-primary" onclick="copyResult()">复制文本</button>
+            <button class="btn btn-primary" onclick="copyResult()">复制 Prompt</button>
         </div>
     </div>
 </div>
 
 <script>
     /* ========================================================================
-     ⚙️ [配置区] 
+     ⚙️ [配置区] - 这里的逻辑与之前完全一致，仅做 UI 适配
      ======================================================================== */
     
-    // 全局默认连接词 (如果没单独写，就用这个，比如逗号)
     const DEFAULT_CONNECTOR = "";
 
-    // 剧配置
-    // 格式：[ "按钮标题", "生成的文本", "下一页ID", "【去往下一页的连接词】" ]
-    // 注意：第四项“连接词”是定义【这句话】和【下一句话】中间用什么连起来。
-    
     const SCENARIO = {
-        
         "root": {
             title: "请选择你要询问的类型",
             options: [
@@ -187,9 +414,9 @@
 
 
     /* ========================================================================
-     🔧 系统逻辑
+     🔧 系统逻辑 (完全未变)
      ======================================================================== */
-    let outputParts = []; // 存储：{ text: "内容", nextConnector: "连接词" }
+    let outputParts = []; 
     let stepCount = 0;
 
     function startApp() {
@@ -207,7 +434,6 @@
         const pageData = SCENARIO[pageId];
         if (!pageData) { alert("配置错误：找不到ID " + pageId); return; }
 
-        // 渲染界面
         container.innerHTML = '';
         statusText.innerText = pageData.title;
         
@@ -222,16 +448,13 @@
         gridDiv.className = 'options-grid';
 
         pageData.options.forEach(item => {
-            // 解构：[标题, 内容, 下一页ID, 去往下一页的连接词]
             const [label, value, nextId, connectorToNext] = item;
             
-            const btn = document.createElement('button');
+            const btn = document.createElement('div'); // 改为div方便样式控制，click事件一样
             btn.className = 'option-card';
-            // 界面上只显示标题，不显示任何多余信息
             btn.innerHTML = `<strong>${label}</strong>`;
             
             btn.onclick = () => {
-                // 保存：当前文本 + 紧接其后的连接词
                 outputParts.push({
                     text: value,
                     connector: connectorToNext || DEFAULT_CONNECTOR
@@ -251,23 +474,17 @@
     }
 
     function finish() {
-        document.getElementById('status-text').innerText = "生成完毕";
+        document.getElementById('status-text').innerText = "Prompt 生成完毕";
         document.getElementById('progress-bar').style.width = "100%";
         document.getElementById('dynamic-content').innerHTML = '';
         
         let finalString = "";
-        
-        // 拼接逻辑：文本 + (如果是中间段落则加连接词)
         outputParts.forEach((part, index) => {
-            // 加上当前的文本
             finalString += part.text;
-            
-            // 如果这不是最后一段，就加上这段话定义的“连接词”
             if (index < outputParts.length - 1) {
                 finalString += part.connector;
             }
         });
-        
         finalString += "。";
 
         document.getElementById('final-output').value = finalString;
@@ -277,7 +494,7 @@
     function copyResult() {
         const textArea = document.getElementById('final-output');
         textArea.select();
-        navigator.clipboard.writeText(textArea.value).then(() => alert("已复制！"));
+        navigator.clipboard.writeText(textArea.value).then(() => alert("已复制到剪贴板"));
     }
 
     startApp();
